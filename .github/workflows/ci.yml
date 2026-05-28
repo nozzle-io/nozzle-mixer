@@ -1,0 +1,266 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, stable ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, stable ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.event_name != 'release' }}
+
+jobs:
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+    outputs:
+      package_root: ${{ steps.meta.outputs.package_root }}
+      package_name: ${{ steps.meta.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DNOZZLE_MIXER_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C Release
+      - name: Codesign app
+        run: codesign --force --deep --sign - build/nozzle-mixer.app
+      - name: Prepare package metadata
+        id: meta
+        run: |
+          repo="${{ github.event.repository.name }}"
+          short_sha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            base="${repo}-${GITHUB_REF_NAME}-macos"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            base="${repo}-latest-${short_sha}-macos"
+          elif [[ "${GITHUB_REF}" == refs/heads/stable ]]; then
+            base="${repo}-stable-${short_sha}-macos"
+          else
+            base="${repo}-ci-${short_sha}-macos"
+          fi
+          echo "package_root=${base}" >> "$GITHUB_OUTPUT"
+          echo "package_name=${base}.zip" >> "$GITHUB_OUTPUT"
+      - name: Package macOS app
+        run: |
+          cd build
+          zip -r "../${{ steps.meta.outputs.package_name }}" nozzle-mixer.app
+      - name: Verify package
+        run: |
+          test -f "${{ steps.meta.outputs.package_name }}"
+          unzip -l "${{ steps.meta.outputs.package_name }}" | grep -F 'nozzle-mixer.app/Contents/MacOS/nozzle-mixer'
+          unzip -l "${{ steps.meta.outputs.package_name }}" | grep -F 'nozzle-mixer.app/Contents/Info.plist'
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.package_root }}
+          path: ${{ steps.meta.outputs.package_name }}
+
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+    outputs:
+      package_root: ${{ steps.meta.outputs.package_root }}
+      package_name: ${{ steps.meta.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DNOZZLE_MIXER_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C Release
+      - name: Prepare package metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $repo = "${{ github.event.repository.name }}"
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $base = "$repo-${{ github.ref_name }}-windows-x64"
+          } elseif ($env:GITHUB_REF -eq "refs/heads/main") {
+            $base = "$repo-latest-$shortSha-windows-x64"
+          } elseif ($env:GITHUB_REF -eq "refs/heads/stable") {
+            $base = "$repo-stable-$shortSha-windows-x64"
+          } else {
+            $base = "$repo-ci-$shortSha-windows-x64"
+          }
+          "package_root=$base" >> $env:GITHUB_OUTPUT
+          "package_name=$base.zip" >> $env:GITHUB_OUTPUT
+      - name: Package Windows executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package | Out-Null
+          Copy-Item build/Release/nozzle-mixer.exe package/nozzle-mixer.exe
+          Compress-Archive -Path package/nozzle-mixer.exe -DestinationPath "${{ steps.meta.outputs.package_name }}"
+      - name: Verify package
+        shell: pwsh
+        run: |
+          if (!(Test-Path "${{ steps.meta.outputs.package_name }}")) { exit 1 }
+          Expand-Archive -Path "${{ steps.meta.outputs.package_name }}" -DestinationPath verify
+          if (!(Test-Path verify/nozzle-mixer.exe)) { exit 1 }
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.package_root }}
+          path: ${{ steps.meta.outputs.package_name }}
+
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    outputs:
+      package_root: ${{ steps.meta.outputs.package_root }}
+      package_name: ${{ steps.meta.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxxf86vm-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libegl-dev \
+            libgbm-dev \
+            libdrm-dev
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DNOZZLE_MIXER_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C Release
+      - name: Prepare package metadata
+        id: meta
+        run: |
+          repo="${{ github.event.repository.name }}"
+          short_sha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            base="${repo}-${GITHUB_REF_NAME}-linux-x64"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            base="${repo}-latest-${short_sha}-linux-x64"
+          elif [[ "${GITHUB_REF}" == refs/heads/stable ]]; then
+            base="${repo}-stable-${short_sha}-linux-x64"
+          else
+            base="${repo}-ci-${short_sha}-linux-x64"
+          fi
+          echo "package_root=${base}" >> "$GITHUB_OUTPUT"
+          echo "package_name=${base}.zip" >> "$GITHUB_OUTPUT"
+      - name: Package Linux executable
+        run: |
+          mkdir -p package
+          cp build/nozzle-mixer package/nozzle-mixer
+          chmod +x package/nozzle-mixer
+          zip -j "${{ steps.meta.outputs.package_name }}" package/nozzle-mixer
+      - name: Verify package
+        run: |
+          test -f "${{ steps.meta.outputs.package_name }}"
+          unzip -l "${{ steps.meta.outputs.package_name }}" | grep -F 'nozzle-mixer'
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.package_root }}
+          path: ${{ steps.meta.outputs.package_name }}
+
+
+  release:
+    needs: [build-macos, build-windows, build-linux]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-macos.outputs.package_root }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-windows.outputs.package_root }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-linux.outputs.package_root }}
+      - name: Verify downloaded packages
+        run: |
+          test -f "${{ needs.build-macos.outputs.package_name }}"
+          test -f "${{ needs.build-windows.outputs.package_name }}"
+          test -f "${{ needs.build-linux.outputs.package_name }}"
+          unzip -l "${{ needs.build-macos.outputs.package_name }}" | grep -F 'nozzle-mixer.app/Contents/MacOS/nozzle-mixer'
+          unzip -l "${{ needs.build-windows.outputs.package_name }}" | grep -F 'nozzle-mixer.exe'
+          unzip -l "${{ needs.build-linux.outputs.package_name }}" | grep -F 'nozzle-mixer'
+      - name: Delete old latest release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release delete latest --yes --repo "${GITHUB_REPOSITORY}"
+          else
+            echo "No existing latest release to delete"
+          fi
+      - name: Check versioned release asset does not exist
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          assets=(
+            "${{ needs.build-macos.outputs.package_name }}"
+            "${{ needs.build-windows.outputs.package_name }}"
+            "${{ needs.build-linux.outputs.package_name }}"
+          )
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name' > existing-assets.txt 2>/dev/null; then
+            for asset in "${assets[@]}"; do
+              if grep -Fx "$asset" existing-assets.txt; then
+                echo "versioned release asset already exists: $asset" >&2
+                exit 1
+              fi
+            done
+          else
+            echo "No existing release for ${GITHUB_REF_NAME}; create step will create it."
+          fi
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          packages=(
+            "${{ needs.build-macos.outputs.package_name }}"
+            "${{ needs.build-windows.outputs.package_name }}"
+            "${{ needs.build-linux.outputs.package_name }}"
+          )
+          if [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            gh release create latest "${packages[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "Latest development snapshot" \
+              --prerelease \
+              --notes "Development snapshot from main. Commit: ${GITHUB_SHA}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              gh release upload "${GITHUB_REF_NAME}" "${packages[@]}" --repo "${GITHUB_REPOSITORY}"
+            else
+              gh release create "${GITHUB_REF_NAME}" "${packages[@]}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --title "${GITHUB_REF_NAME}" \
+                --notes "Release ${GITHUB_REF_NAME}"
+            fi
+          else
+            echo "unsupported release ref: ${GITHUB_REF}" >&2
+            exit 1
+          fi
