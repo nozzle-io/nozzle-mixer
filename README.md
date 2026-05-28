@@ -16,7 +16,7 @@
   - Picture-in-picture
   - Solid color fallback
 
-The mixer path is intentionally not a CPU readback compositor. CPU pixel readback is used only for small UI previews and diagnostics.
+The mixer path is intentionally not a CPU readback compositor. CPU pixel readback is disabled by default and is used only when the optional diagnostic preview toggle is enabled; selected mixer inputs still acquire GPU texture handles for the compositor path.
 
 ## Backend status
 

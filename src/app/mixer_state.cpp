@@ -23,6 +23,7 @@ uint32_t mixer_state::output_height() const noexcept { return output_height_; }
 mixer_mode mixer_state::mode() const noexcept { return mode_; }
 float mixer_state::crossfade() const noexcept { return crossfade_; }
 bool mixer_state::publishing_requested() const noexcept { return publishing_requested_; }
+bool mixer_state::diagnostic_previews_enabled() const noexcept { return diagnostic_previews_enabled_; }
 
 void mixer_state::set_auto_refresh(bool enabled) noexcept { auto_refresh_ = enabled; }
 void mixer_state::set_input_a_key(const std::string &key) { input_a_key_ = key; }
@@ -37,6 +38,7 @@ void mixer_state::set_output_size(uint32_t width, uint32_t height) noexcept {
 void mixer_state::set_mode(mixer_mode mode) noexcept { mode_ = mode; }
 void mixer_state::set_crossfade(float value) noexcept { crossfade_ = clamp_unit(value); }
 void mixer_state::set_publishing_requested(bool enabled) noexcept { publishing_requested_ = enabled; }
+void mixer_state::set_diagnostic_previews_enabled(bool enabled) noexcept { diagnostic_previews_enabled_ = enabled; }
 
 void mixer_state::reconcile_sources(const source_registry &registry) {
     if(!source_exists(registry, input_a_key_)) input_a_key_.clear();

@@ -9,7 +9,7 @@
 - `receiver_session`: one nozzle receiver plus the latest frame lifetime required for GPU texture binding.
 - `gpu_compositor`: platform-native render path and output texture ownership.
 - `output_publisher`: nozzle sender lifecycle and publishing of the GPU output texture.
-- `gui`: ImGui controls, small diagnostic previews, and orchestration.
+- `gui`: ImGui controls, optional diagnostic CPU previews, and orchestration. Diagnostic previews are disabled by default so the mixer path does not read every source back to CPU memory.
 
 ## Backend strategy
 

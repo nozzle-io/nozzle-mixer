@@ -140,10 +140,15 @@ void gui::refresh_sources() {
 void gui::update_sessions() {
     const auto now = std::chrono::steady_clock::now();
     if(state_.auto_refresh() && k_refresh_interval <= now - last_refresh_) refresh_sources();
-    for(auto &pair : sessions_) {
-        auto &session = pair.second;
-        if(!session.connected) connect_session(session);
-        if(session.connected) acquire_frame(session);
+    receiver_session *input_a = session_for_key(state_.input_a_key());
+    receiver_session *input_b = session_for_key(state_.input_b_key());
+    if(input_a) {
+        if(!input_a->connected) connect_session(*input_a);
+        if(input_a->connected) acquire_frame(*input_a);
+    }
+    if(input_b && input_b != input_a) {
+        if(!input_b->connected) connect_session(*input_b);
+        if(input_b->connected) acquire_frame(*input_b);
     }
 }
 
@@ -236,16 +241,23 @@ void gui::acquire_frame(receiver_session &session) {
     session.connected_info = session.receiver->connected_info();
     session.last_frame_index = info.frame_index;
 
+    if(!state_.diagnostic_previews_enabled()) {
+        destroy_session_texture(session);
+        session.status = session.gpu_ref.usable ? "GPU input live" : "no GPU texture handle";
+        session.error = session.gpu_ref.usable ? "" : format_name(info.format);
+        return;
+    }
+
     bool supported = false;
     const auto preview_format = preview_format_from_nozzle(info.format, &supported);
     if(!supported) {
-        session.status = session.gpu_ref.usable ? "GPU input only; preview unsupported" : "unsupported input format";
+        session.status = session.gpu_ref.usable ? "GPU input live; diagnostic preview unsupported" : "unsupported input format";
         session.error = format_name(info.format);
         return;
     }
     auto pixels_result = nozzle::lock_frame_pixels_with_origin(frame, nozzle::texture_origin::top_left);
     if(!pixels_result.ok()) {
-        session.status = session.gpu_ref.usable ? "GPU input live; preview readback failed" : "pixel readback failed";
+        session.status = session.gpu_ref.usable ? "GPU input live; diagnostic preview readback failed" : "pixel readback failed";
         session.error = pixels_result.error().message;
         return;
     }
@@ -257,7 +269,7 @@ void gui::acquire_frame(receiver_session &session) {
         session.preview_height = pixels.height;
     }
     if(session.preview_texture && backend_->update_preview_texture(session.preview_texture, pixels.data, pixels.width, pixels.height, pixels.row_stride_bytes, preview_format)) {
-        session.status = session.gpu_ref.usable ? "GPU input live" : "CPU preview only";
+        session.status = session.gpu_ref.usable ? "GPU input live; diagnostic preview" : "CPU diagnostic preview only";
         session.error.clear();
     }
     nozzle::unlock_frame_pixels(frame);
@@ -309,6 +321,8 @@ void gui::draw_toolbar() {
     if(ImGui::SliderFloat("Crossfade", &crossfade, 0.0f, 1.0f)) state_.set_crossfade(crossfade);
     bool publish = state_.publishing_requested();
     if(ImGui::Checkbox("Publish output", &publish)) state_.set_publishing_requested(publish);
+    bool diagnostic_previews = state_.diagnostic_previews_enabled();
+    if(ImGui::Checkbox("Diagnostic CPU previews", &diagnostic_previews)) state_.set_diagnostic_previews_enabled(diagnostic_previews);
     ImGui::TextDisabled("GPU backend: %s", compositor_ ? compositor_->backend_name() : "none");
     ImGui::Text("Publisher: %s", publisher_.status().c_str());
     if(compositor_ && compositor_->last_error()[0] != '\0') ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", compositor_->last_error());
@@ -340,7 +354,11 @@ void gui::draw_source_tile(receiver_session &session, float width, float height)
     ImGui::TextDisabled("GPU input: %s", session.gpu_ref.usable ? "yes" : "no");
     const float image_w = ImGui::GetContentRegionAvail().x;
     const float image_h = std::max(80.0f, ImGui::GetContentRegionAvail().y - 92.0f);
-    if(session.preview_texture && 0 < session.preview_width && 0 < session.preview_height) {
+    if(!state_.diagnostic_previews_enabled()) {
+        ImGui::Dummy(ImVec2(image_w, image_h));
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - image_h * 0.55f);
+        ImGui::TextDisabled("CPU preview disabled");
+    } else if(session.preview_texture && 0 < session.preview_width && 0 < session.preview_height) {
         const float aspect = (float)session.preview_width / (float)session.preview_height;
         float draw_w = image_w;
         float draw_h = draw_w / aspect;

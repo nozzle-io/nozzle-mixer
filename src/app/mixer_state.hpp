@@ -19,6 +19,7 @@ public:
     mixer_mode mode() const noexcept;
     float crossfade() const noexcept;
     bool publishing_requested() const noexcept;
+    bool diagnostic_previews_enabled() const noexcept;
 
     void set_auto_refresh(bool enabled) noexcept;
     void set_input_a_key(const std::string &key);
@@ -28,6 +29,7 @@ public:
     void set_mode(mixer_mode mode) noexcept;
     void set_crossfade(float value) noexcept;
     void set_publishing_requested(bool enabled) noexcept;
+    void set_diagnostic_previews_enabled(bool enabled) noexcept;
     void reconcile_sources(const source_registry &registry);
 
 private:
@@ -40,6 +42,7 @@ private:
     mixer_mode mode_{mixer_mode::cut_a};
     float crossfade_{0.0f};
     bool publishing_requested_{false};
+    bool diagnostic_previews_enabled_{false};
 };
 
 } // namespace nozzle_mixer
