@@ -142,12 +142,16 @@ public:
                 CFRelease(surface_);
                 surface_ = nullptr;
             }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
             NSDictionary *props = @{
+                (NSString *)kIOSurfaceIsGlobal: @(YES),
                 (NSString *)kIOSurfaceWidth: @(width),
                 (NSString *)kIOSurfaceHeight: @(height),
                 (NSString *)kIOSurfaceBytesPerElement: @(4),
                 (NSString *)kIOSurfacePixelFormat: @((uint32_t)'BGRA')
             };
+#pragma clang diagnostic pop
             surface_ = IOSurfaceCreate((CFDictionaryRef)props);
             if(!surface_) return fail("IOSurfaceCreate failed");
             MTLTextureDescriptor *tex_desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:width height:height mipmapped:NO];
