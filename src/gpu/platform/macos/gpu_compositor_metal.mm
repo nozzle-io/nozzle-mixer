@@ -33,6 +33,8 @@ vertex vertex_out vertex_main(uint vertex_id [[vertex_id]]) {
 
 struct params_t {
     uint mode;
+    uint has_a;
+    uint has_b;
     float crossfade;
     float pip_scale;
     float pip_margin_x;
@@ -46,8 +48,8 @@ fragment float4 fragment_main(vertex_out in [[stage_in]],
                               constant params_t &params [[buffer(0)]]) {
     constexpr sampler s(address::clamp_to_edge, filter::linear);
     float2 uv = clamp(in.uv, float2(0.0), float2(1.0));
-    bool has_a = input_a.get_width() > 0;
-    bool has_b = input_b.get_width() > 0;
+    bool has_a = params.has_a != 0;
+    bool has_b = params.has_b != 0;
     float4 a = has_a ? input_a.sample(s, uv) : params.solid_color;
     float4 b = has_b ? input_b.sample(s, uv) : params.solid_color;
     if(params.mode == 0) return a;
@@ -71,6 +73,8 @@ fragment float4 fragment_main(vertex_out in [[stage_in]],
 
 struct metal_params {
     uint32_t mode{0};
+    uint32_t has_a{0};
+    uint32_t has_b{0};
     float crossfade{0.0f};
     float pip_scale{0.30f};
     float pip_margin_x{0.04f};
@@ -187,12 +191,16 @@ public:
             pass.colorAttachments[0].clearColor = MTLClearColorMake(params.solid_r, params.solid_g, params.solid_b, params.solid_a);
             id<MTLRenderCommandEncoder> encoder = [command_buffer renderCommandEncoderWithDescriptor:pass];
             [encoder setRenderPipelineState:pipeline_];
-            id<MTLTexture> texture_a = input_a && input_a->usable ? (__bridge id<MTLTexture>)input_a->native_texture : fallback_texture_;
-            id<MTLTexture> texture_b = input_b && input_b->usable ? (__bridge id<MTLTexture>)input_b->native_texture : fallback_texture_;
+            const bool has_a = input_a && input_a->usable;
+            const bool has_b = input_b && input_b->usable;
+            id<MTLTexture> texture_a = has_a ? (__bridge id<MTLTexture>)input_a->native_texture : fallback_texture_;
+            id<MTLTexture> texture_b = has_b ? (__bridge id<MTLTexture>)input_b->native_texture : fallback_texture_;
             [encoder setFragmentTexture:texture_a atIndex:0];
             [encoder setFragmentTexture:texture_b atIndex:1];
             metal_params metal{};
             metal.mode = mode_index(params.mode);
+            metal.has_a = has_a ? 1u : 0u;
+            metal.has_b = has_b ? 1u : 0u;
             metal.crossfade = clamp_unit(params.crossfade);
             metal.pip_scale = params.pip_scale;
             metal.pip_margin_x = params.pip_margin_x;

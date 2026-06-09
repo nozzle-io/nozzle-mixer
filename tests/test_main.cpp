@@ -4,6 +4,8 @@
 #include <app/smoke_forward.hpp>
 
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -131,6 +133,25 @@ void test_smoke_forward_rejects_bad_options() {
     expect(!nozzle_mixer::has_smoke_forward_request(argc_of(gui_unknown), const_cast<char **>(gui_unknown)), "GUI-only options are not parsed as smoke-forward options");
 }
 
+void test_metal_fallback_presence_is_not_texture_size() {
+#if defined(__APPLE__) && defined(NOZZLE_MIXER_SOURCE_DIR)
+    const std::string path = std::string(NOZZLE_MIXER_SOURCE_DIR) + "/src/gpu/platform/macos/gpu_compositor_metal.mm";
+    std::ifstream file(path);
+    expect(file.good(), "Metal compositor source is readable for fallback-presence regression guard");
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string source = buffer.str();
+    expect(source.find("uint has_a;") != std::string::npos, "Metal shader has explicit has_a parameter");
+    expect(source.find("uint has_b;") != std::string::npos, "Metal shader has explicit has_b parameter");
+    expect(source.find("params.has_a != 0") != std::string::npos, "Metal shader reads explicit has_a parameter");
+    expect(source.find("params.has_b != 0") != std::string::npos, "Metal shader reads explicit has_b parameter");
+    expect(source.find("input_a.get_width() > 0") == std::string::npos, "Metal shader does not use texture width as input A presence");
+    expect(source.find("input_b.get_width() > 0") == std::string::npos, "Metal shader does not use texture width as input B presence");
+    expect(source.find("metal.has_a = has_a ? 1u : 0u;") != std::string::npos, "Metal renderer writes explicit has_a parameter");
+    expect(source.find("metal.has_b = has_b ? 1u : 0u;") != std::string::npos, "Metal renderer writes explicit has_b parameter");
+#endif
+}
+
 } // namespace
 
 int main() {
@@ -141,5 +162,6 @@ int main() {
     test_backend_and_mode_names_are_stable();
     test_smoke_forward_option_parsing();
     test_smoke_forward_rejects_bad_options();
+    test_metal_fallback_presence_is_not_texture_size();
     return failures == 0 ? 0 : 1;
 }
