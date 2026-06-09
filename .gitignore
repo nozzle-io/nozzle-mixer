@@ -7,3 +7,5 @@ cmake-build-*/
 *.suo
 *.tmp
 imgui.ini
+
+build-*/

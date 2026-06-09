@@ -43,10 +43,31 @@ Linux requires the OpenGL/X11/Wayland packages used by GLFW plus the GBM/DRM/EGL
 ## Usage
 
 ```sh
+# macOS bundle build
+./build/nozzle-mixer.app/Contents/MacOS/nozzle-mixer
+
+# Linux / Windows non-bundle builds
 ./build/nozzle-mixer
 ```
 
 Select Input A and Input B, choose a mixer mode, then enable **Publish output**. The output appears as a new nozzle source using the configured output name.
+
+For deterministic runtime smoke tests, the same binary can run without the GUI and forward one input source through the GPU compositor. On macOS use the bundle executable path:
+
+```sh
+./build/nozzle-mixer.app/Contents/MacOS/nozzle-mixer --smoke-forward \
+  --source NozzleUnrealSmoke320 \
+  --output NozzleMixerSmoke320 \
+  --width 320 \
+  --height 240 \
+  --min-frames 5 \
+  --publish-frames 120 \
+  --timeout-ms 120000 \
+  --hold-ms 5000 \
+  --evidence /tmp/nozzle-mixer-smoke.json
+```
+
+`--smoke-forward` uses the platform GPU compositor in Cut A mode and republishes via the normal `output_publisher`; it does not use the diagnostic CPU preview/readback path. Treat its PASS as forwarding-path evidence only. For end-to-end runtime evidence, run a downstream receiver such as `nozzle-viewer --smoke-receiver` against the mixer output and verify that the viewer JSON records `sender_name`/`connected_sender_name` matching the mixer output name and `connected_sender_application` as `nozzle-mixer`, with pixels, orientation, channel order, alpha, and moving-frame checks all PASS.
 
 ## Limitations
 

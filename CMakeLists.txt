@@ -58,6 +58,7 @@ set(NOZZLE_MIXER_APP_SOURCES
     src/app/source_registry.cpp
     src/app/mixer_state.cpp
     src/app/output_publisher.cpp
+    src/app/smoke_forward.cpp
     src/gpu_compositor.cpp
     src/gui/gui.cpp
 )

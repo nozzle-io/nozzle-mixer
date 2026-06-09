@@ -99,6 +99,7 @@ public:
             [pipeline_ release];
             [queue_ release];
             [output_texture_ release];
+            [fallback_texture_ release];
             if(surface_) {
                 CFRelease(surface_);
                 surface_ = nullptr;
@@ -109,9 +110,9 @@ public:
 
     bool init(uint32_t width, uint32_t height) override {
         @autoreleasepool {
-            device_ = [MTLCreateSystemDefaultDevice() retain];
+            device_ = MTLCreateSystemDefaultDevice();
             if(!device_) return fail("MTLCreateSystemDefaultDevice failed");
-            queue_ = [[device_ newCommandQueue] retain];
+            queue_ = [device_ newCommandQueue];
             if(!queue_) return fail("newCommandQueue failed");
             NSError *error = nil;
             id<MTLLibrary> library = [device_ newLibraryWithSource:shader_source() options:nil error:&error];
@@ -122,7 +123,7 @@ public:
             desc.vertexFunction = vertex;
             desc.fragmentFunction = fragment;
             desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-            pipeline_ = [[device_ newRenderPipelineStateWithDescriptor:desc error:&error] retain];
+            pipeline_ = [device_ newRenderPipelineStateWithDescriptor:desc error:&error];
             [desc release];
             [vertex release];
             [fragment release];
@@ -157,8 +158,18 @@ public:
             MTLTextureDescriptor *tex_desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:width height:height mipmapped:NO];
             tex_desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
             tex_desc.storageMode = MTLStorageModeShared;
-            output_texture_ = [[device_ newTextureWithDescriptor:tex_desc iosurface:surface_ plane:0] retain];
+            output_texture_ = [device_ newTextureWithDescriptor:tex_desc iosurface:surface_ plane:0];
             if(!output_texture_) return fail("IOSurface-backed output texture creation failed");
+            if(!fallback_texture_) {
+                MTLTextureDescriptor *fallback_desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:1 height:1 mipmapped:NO];
+                fallback_desc.usage = MTLTextureUsageShaderRead;
+                fallback_desc.storageMode = MTLStorageModeShared;
+                fallback_texture_ = [device_ newTextureWithDescriptor:fallback_desc];
+                if(!fallback_texture_) return fail("fallback texture creation failed");
+                uint32_t pixel = 0xff000000u;
+                MTLRegion region = MTLRegionMake2D(0, 0, 1, 1);
+                [fallback_texture_ replaceRegion:region mipmapLevel:0 withBytes:&pixel bytesPerRow:sizeof(pixel)];
+            }
             width_ = width;
             height_ = height;
             return true;
@@ -176,8 +187,8 @@ public:
             pass.colorAttachments[0].clearColor = MTLClearColorMake(params.solid_r, params.solid_g, params.solid_b, params.solid_a);
             id<MTLRenderCommandEncoder> encoder = [command_buffer renderCommandEncoderWithDescriptor:pass];
             [encoder setRenderPipelineState:pipeline_];
-            id<MTLTexture> texture_a = input_a && input_a->usable ? (__bridge id<MTLTexture>)input_a->native_texture : nil;
-            id<MTLTexture> texture_b = input_b && input_b->usable ? (__bridge id<MTLTexture>)input_b->native_texture : nil;
+            id<MTLTexture> texture_a = input_a && input_a->usable ? (__bridge id<MTLTexture>)input_a->native_texture : fallback_texture_;
+            id<MTLTexture> texture_b = input_b && input_b->usable ? (__bridge id<MTLTexture>)input_b->native_texture : fallback_texture_;
             [encoder setFragmentTexture:texture_a atIndex:0];
             [encoder setFragmentTexture:texture_b atIndex:1];
             metal_params metal{};
@@ -228,6 +239,7 @@ private:
     id<MTLCommandQueue> queue_{nil};
     id<MTLRenderPipelineState> pipeline_{nil};
     id<MTLTexture> output_texture_{nil};
+    id<MTLTexture> fallback_texture_{nil};
     IOSurfaceRef surface_{nullptr};
     uint32_t width_{0};
     uint32_t height_{0};
