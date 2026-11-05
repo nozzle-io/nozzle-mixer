@@ -40,6 +40,8 @@ ctest --test-dir build --output-on-failure -C Release
 
 Linux requires the OpenGL/X11/Wayland packages used by GLFW plus the GBM/DRM/EGL packages used by nozzle.
 
+The published Linux x64 build targets **x86-64-v2** (no AVX, AVX2, FMA or F16C). CI sets this explicitly and verifies the binary with `nozzle/scripts/check_x86_64_isa.sh`.
+
 ## Usage
 
 ```sh
