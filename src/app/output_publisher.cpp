@@ -2,7 +2,8 @@
 
 namespace nozzle_mixer {
 
-bool output_publisher::start(const std::string &name, uint32_t width, uint32_t height) {
+bool output_publisher::start(const std::string &name, uint32_t width, uint32_t height,
+    const nozzle::native_device_desc &native_device) {
     if(name.empty() || width == 0 || height == 0) {
         status_ = "invalid output settings";
         error_ = "output name and size are required";
@@ -13,6 +14,7 @@ bool output_publisher::start(const std::string &name, uint32_t width, uint32_t h
     desc.name = name;
     desc.application_name = "nozzle-mixer";
     desc.ring_buffer_size = 3;
+    desc.native_device = native_device;
 
     auto result = nozzle::sender::create(desc);
     if(!result.ok()) {
