@@ -46,8 +46,10 @@ def main():
     check_invalid_utf16(args.exe)
     name = "\u65e5\u672c \U0001f680 \"252\"-" + uuid.uuid4().hex[:8]
     with tempfile.TemporaryDirectory(prefix="nozzle-argv-") as directory:
-        expected = Path(directory) / "expected-name.txt"
-        evidence = Path(directory) / "mixer.json"
+        unicode_dir = Path(directory) / "\u65e5\u672c-\U0001f680"
+        unicode_dir.mkdir()
+        expected = unicode_dir / "\u540d\U0001f680.txt"
+        evidence = unicode_dir / "\u8a3c\U0001f680.json"
         expected.write_text(name, encoding="utf-8")
         source = "missing-" + name
         mixer = subprocess.Popen([
@@ -71,7 +73,7 @@ def main():
                 raise AssertionError(f"source/output identity or failure mismatch: {record!r}")
         finally:
             stop(mixer)
-    print("PASS Windows Unicode output registration and input selection; no composition/pixel claim")
+    print("PASS Windows Unicode output registration, input selection and evidence/probe paths; no pixel claim")
 
 
 if __name__ == "__main__":

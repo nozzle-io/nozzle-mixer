@@ -2,15 +2,16 @@
 
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
 #include <thread>
 
-int main(int argc, char **argv) {
+int wmain(int argc, wchar_t **argv) {
     if(argc != 2) return 2;
     // The expected name arrives as UTF-8 file bytes, independently of argv conversion.
-    std::ifstream input(argv[1], std::ios::binary);
+    std::ifstream input(std::filesystem::path(argv[1]), std::ios::binary);
     if(!input) return 2;
     const std::string expected{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     if(expected.empty()) return 2;
