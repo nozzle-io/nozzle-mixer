@@ -164,7 +164,8 @@ void gui::update_mixer() {
     compositor_->resize(state_.output_width(), state_.output_height());
     compositor_->render(ref_a, ref_b, params);
     if(state_.publishing_requested() && !publisher_.active()) {
-        publisher_.start(state_.output_name(), state_.output_width(), state_.output_height());
+        publisher_.start(state_.output_name(), state_.output_width(), state_.output_height(),
+            compositor_->native_device());
     } else if(!state_.publishing_requested() && publisher_.active()) {
         publisher_.stop();
     }

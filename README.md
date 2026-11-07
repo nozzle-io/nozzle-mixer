@@ -23,10 +23,23 @@ The mixer path is intentionally not a CPU readback compositor. CPU pixel readbac
 | Platform | GPU compositor | Publish path | Status |
 | --- | --- | --- | --- |
 | macOS | Metal fragment shader | IOSurface-backed `publish_metal_texture_direct()` | Functional first target |
-| Windows | D3D11 render target | `publish_native_texture()` | Buildable GPU output path; shader composition is next hardening step |
+| Windows | Private D3D11 render target | Same-device `publish_native_texture()` into shared rings | Solid-color output only; input shader composition remains unimplemented |
 | Linux | DMA-BUF/EGL handles | DMA-BUF publish | Build scaffold only; EGL/GBM allocation/export remains explicit follow-up |
 
 This split is deliberate. A fake cross-platform CPU mixer would be easier, but it would not satisfy the latency and bandwidth requirements of a real nozzle mixer.
+
+On Windows the compositor owns the device and immediate context, and the output
+sender borrows them through `sender_desc.native_device`. Stop the publisher before
+destroying or reinitializing the compositor. Publisher stop/start reuses that
+device; resizing replaces only output textures. The private render target needs
+no shared-handle flags: nozzle copies it into its own shared ring textures.
+
+The Windows CTest `nozzle_mixer_d3d11_output` exercises actual solid-color rendering
+and publication, with a bounded independent receiver child checking every BGRA
+pixel for two distinct colors and a third after publisher restart. Each observation
+uses a fresh receiver process, not identity reconnection. Setup failures fail the
+test rather than skip it. Readback is confined to the test receiver. This test does
+not validate A/B composition, GUI preview, or the separate Unicode CLI contract.
 
 ## Build
 
@@ -75,7 +88,7 @@ For deterministic runtime smoke tests, the same binary can run without the GUI a
 
 - v0.1 is GPU-first but not yet feature-complete on every backend.
 - macOS Metal is the first functional compositor target.
-- Windows currently establishes a GPU render-target publish path; full HLSL A/B shader composition is a follow-up.
+- Windows renders solid color and ignores input textures; full HLSL A/B shader composition is a follow-up. A Windows `--smoke-forward` PASS alone is not input-pixel forwarding evidence.
 - Linux requires EGL/GBM DMA-BUF output allocation/export before runtime publishing is useful.
 - Strict A/B frame synchronization is not implemented; the mixer uses the latest acquired frame for each input.
 - Unsupported formats are listed and can still be diagnosed, but v0.1 focuses on common 8-bit color sources.

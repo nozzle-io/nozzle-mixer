@@ -11,7 +11,9 @@ namespace nozzle_mixer {
 
 class output_publisher {
 public:
-    bool start(const std::string &name, uint32_t width, uint32_t height);
+    // The injected device/context must outlive this publisher's active sender.
+    bool start(const std::string &name, uint32_t width, uint32_t height,
+        const nozzle::native_device_desc &native_device = {});
     void stop();
     nozzle::Result<void> publish(gpu_compositor &compositor);
 

@@ -6,6 +6,7 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 
+#include <cstdio>
 #include <string>
 
 namespace nozzle_mixer {
@@ -27,7 +28,7 @@ public:
             device_.GetAddressOf(),
             &selected,
             context_.GetAddressOf());
-        if(FAILED(hr)) return fail("D3D11CreateDevice failed");
+        if(FAILED(hr)) return fail_hresult("D3D11CreateDevice", hr);
         return resize(width, height);
     }
 
@@ -45,11 +46,12 @@ public:
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-        desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+        // Private render target; publication copies into nozzle's shared ring.
+        desc.MiscFlags = 0;
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, output_.GetAddressOf());
-        if(FAILED(hr)) return fail("CreateTexture2D output failed");
+        if(FAILED(hr)) return fail_hresult("CreateTexture2D output", hr);
         hr = device_->CreateRenderTargetView(output_.Get(), nullptr, render_target_.GetAddressOf());
-        if(FAILED(hr)) return fail("CreateRenderTargetView output failed");
+        if(FAILED(hr)) return fail_hresult("CreateRenderTargetView output", hr);
         width_ = width;
         height_ = height;
         return true;
@@ -78,10 +80,20 @@ public:
     }
 
     void *preview_texture_handle() const override { return output_.Get(); }
+    nozzle::native_device_desc native_device() const override {
+        return {nozzle::backend_type::d3d11, device_.Get(), context_.Get()};
+    }
     const char *backend_name() const override { return "D3D11"; }
     const char *last_error() const override { return error_.c_str(); }
 
 private:
+    bool fail_hresult(const char *operation, HRESULT hr) {
+        char message[160]{};
+        std::snprintf(message, sizeof(message), "%s failed (HRESULT 0x%08lX)",
+            operation, static_cast<unsigned long>(hr));
+        return fail(message);
+    }
+
     bool fail(const char *message) {
         error_ = message ? message : "unknown D3D11 compositor error";
         return false;
