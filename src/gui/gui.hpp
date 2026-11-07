@@ -52,6 +52,7 @@ private:
     void update_mixer();
     void reconcile_sessions();
     void connect_session(receiver_session &session);
+    void disconnect_session(receiver_session &session);
     void acquire_frame(receiver_session &session);
     void draw_ui();
     void draw_toolbar();

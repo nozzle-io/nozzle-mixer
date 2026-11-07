@@ -8,8 +8,23 @@ std::string source_key(const source_entry &source) {
     return source.id.empty() ? source.name : source.id;
 }
 
-bool source_exists(const source_registry &registry, const std::string &key) {
-    return key.empty() || registry.find_by_id_or_name(key) != nullptr;
+void reconcile_input(const source_registry &registry, std::string &key, std::string &name) {
+    if(key.empty()) return;
+    const auto *source = registry.find_by_key(key);
+    if(!source && !name.empty()) {
+        for(const auto &candidate : registry.sources()) {
+            if(candidate.name == name) {
+                source = &candidate;
+                break;
+            }
+        }
+    }
+    if(source) {
+        key = source_key(*source);
+        name = source->name;
+    } else if(name.empty()) {
+        key.clear();
+    }
 }
 
 } // namespace
@@ -17,6 +32,8 @@ bool source_exists(const source_registry &registry, const std::string &key) {
 bool mixer_state::auto_refresh() const noexcept { return auto_refresh_; }
 const std::string &mixer_state::input_a_key() const noexcept { return input_a_key_; }
 const std::string &mixer_state::input_b_key() const noexcept { return input_b_key_; }
+const std::string &mixer_state::input_a_name() const noexcept { return input_a_name_; }
+const std::string &mixer_state::input_b_name() const noexcept { return input_b_name_; }
 const std::string &mixer_state::output_name() const noexcept { return output_name_; }
 uint32_t mixer_state::output_width() const noexcept { return output_width_; }
 uint32_t mixer_state::output_height() const noexcept { return output_height_; }
@@ -26,8 +43,15 @@ bool mixer_state::publishing_requested() const noexcept { return publishing_requ
 bool mixer_state::diagnostic_previews_enabled() const noexcept { return diagnostic_previews_enabled_; }
 
 void mixer_state::set_auto_refresh(bool enabled) noexcept { auto_refresh_ = enabled; }
-void mixer_state::set_input_a_key(const std::string &key) { input_a_key_ = key; }
-void mixer_state::set_input_b_key(const std::string &key) { input_b_key_ = key; }
+void mixer_state::set_input_a_key(const std::string &key) {
+    input_a_key_ = key;
+    input_a_name_.clear();
+    initial_input_a_selection_ = false;
+}
+void mixer_state::set_input_b_key(const std::string &key) {
+    input_b_key_ = key;
+    input_b_name_.clear();
+}
 void mixer_state::set_output_name(const std::string &name) { output_name_ = name.empty() ? "nozzle-mixer" : name; }
 
 void mixer_state::set_output_size(uint32_t width, uint32_t height) noexcept {
@@ -41,9 +65,12 @@ void mixer_state::set_publishing_requested(bool enabled) noexcept { publishing_r
 void mixer_state::set_diagnostic_previews_enabled(bool enabled) noexcept { diagnostic_previews_enabled_ = enabled; }
 
 void mixer_state::reconcile_sources(const source_registry &registry) {
-    if(!source_exists(registry, input_a_key_)) input_a_key_.clear();
-    if(!source_exists(registry, input_b_key_)) input_b_key_.clear();
-    if(input_a_key_.empty() && !registry.sources().empty()) input_a_key_ = source_key(registry.sources().front());
+    if(initial_input_a_selection_ && !registry.sources().empty()) {
+        input_a_key_ = source_key(registry.sources().front());
+        initial_input_a_selection_ = false;
+    }
+    reconcile_input(registry, input_a_key_, input_a_name_);
+    reconcile_input(registry, input_b_key_, input_b_name_);
 }
 
 } // namespace nozzle_mixer

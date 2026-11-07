@@ -52,6 +52,131 @@ void test_mixer_state_reconciles_inputs() {
     expect(state.input_b_key().empty(), "missing input B is cleared");
 }
 
+void set_input_key(nozzle_mixer::mixer_state &state, bool input_a, const std::string &key) {
+    if(input_a) state.set_input_a_key(key);
+    else state.set_input_b_key(key);
+}
+
+const std::string &input_key(const nozzle_mixer::mixer_state &state, bool input_a) {
+    return input_a ? state.input_a_key() : state.input_b_key();
+}
+
+void test_selected_inputs_wait_and_reconnect_by_name() {
+    for(bool input_a : {true, false}) {
+        nozzle_mixer::source_registry registry;
+        registry.set_sources({
+            {"other", "app", "other-id", nozzle::backend_type::metal},
+            {"camera", "app", "old-id", nozzle::backend_type::metal},
+        });
+        nozzle_mixer::mixer_state state;
+        state.reconcile_sources(registry);
+        set_input_key(state, input_a, "old-id");
+        state.reconcile_sources(registry);
+
+        registry.set_sources({{"other", "app", "other-id", nozzle::backend_type::metal}});
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "old-id", "missing selected A/B does not switch to another source");
+        registry.set_sources({});
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "old-id", "empty discovery preserves selected A/B intent");
+
+        registry.set_sources({
+            {"other", "app", "other-id", nozzle::backend_type::metal},
+            {"camera", "replacement", "new-id", nozzle::backend_type::metal},
+        });
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "new-id", "returning same-name source updates selected A/B UUID");
+    }
+}
+
+void test_selected_inputs_accept_direct_uuid_replacement() {
+    for(bool input_a : {true, false}) {
+        nozzle_mixer::source_registry registry;
+        registry.set_sources({{"camera", "app", "old-id", nozzle::backend_type::metal}});
+        nozzle_mixer::mixer_state state;
+        set_input_key(state, input_a, "old-id");
+        state.reconcile_sources(registry);
+        registry.set_sources({
+            {"other", "app", "other-id", nozzle::backend_type::metal},
+            {"camera", "app", "new-id", nozzle::backend_type::metal},
+        });
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "new-id", "direct same-name replacement updates A/B without an absent snapshot");
+    }
+}
+
+void test_selected_inputs_ignore_uuid_name_collisions() {
+    for(bool input_a : {true, false}) {
+        nozzle_mixer::source_registry registry;
+        registry.set_sources({{"camera", "app", "U", nozzle::backend_type::metal}});
+        nozzle_mixer::mixer_state state;
+        set_input_key(state, input_a, "U");
+        state.reconcile_sources(registry);
+
+        registry.set_sources({{"U", "impostor", "V", nozzle::backend_type::metal}});
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "U", "impostor name must not steal missing A/B UUID selection");
+        expect((input_a ? state.input_a_name() : state.input_b_name()) == "camera",
+            "impostor name must not replace remembered A/B source name");
+
+        registry.set_sources({
+            {"U", "impostor", "V", nozzle::backend_type::metal},
+            {"camera", "replacement", "new-id", nozzle::backend_type::metal},
+        });
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "new-id", "A/B reconnects camera despite colliding impostor name");
+        expect((input_a ? state.input_a_name() : state.input_b_name()) == "camera",
+            "A/B retains camera intent after UUID replacement");
+    }
+}
+
+void test_explicit_input_clear_and_switch_replace_reconnect_intent() {
+    for(bool input_a : {true, false}) {
+        for(bool clear : {true, false}) {
+            nozzle_mixer::source_registry registry;
+            registry.set_sources({
+                {"camera", "app", "old-id", nozzle::backend_type::metal},
+                {"other", "app", "other-id", nozzle::backend_type::metal},
+            });
+            nozzle_mixer::mixer_state state;
+            set_input_key(state, input_a, "old-id");
+            state.reconcile_sources(registry);
+            registry.set_sources({{"other", "app", "other-id", nozzle::backend_type::metal}});
+            state.reconcile_sources(registry);
+            set_input_key(state, input_a, clear ? "" : "other-id");
+            state.reconcile_sources(registry);
+            registry.set_sources({{"camera", "app", "new-id", nozzle::backend_type::metal}});
+            state.reconcile_sources(registry);
+            expect(input_key(state, input_a) == (clear ? "" : "other-id"),
+                "return of old selection does not override explicit A/B clear or switch");
+            registry.set_sources({
+                {"camera", "app", "new-id", nozzle::backend_type::metal},
+                {"other", "app", "other-new-id", nozzle::backend_type::metal},
+            });
+            state.reconcile_sources(registry);
+            expect(input_key(state, input_a) == (clear ? "" : "other-new-id"),
+                "A/B only reconnects the latest explicit selection");
+        }
+    }
+}
+
+void test_initial_auto_selection_and_explicit_none() {
+    nozzle_mixer::source_registry registry;
+    nozzle_mixer::mixer_state automatic;
+    nozzle_mixer::mixer_state cleared;
+    cleared.set_input_a_key("");
+    automatic.reconcile_sources(registry);
+    cleared.reconcile_sources(registry);
+    registry.set_sources({{"camera", "app", "old-id", nozzle::backend_type::metal}});
+    automatic.reconcile_sources(registry);
+    cleared.reconcile_sources(registry);
+    expect(automatic.input_a_key() == "old-id", "initial auto A waits for the first available source");
+    expect(cleared.input_a_key().empty(), "explicit none prevents later auto A selection");
+    registry.set_sources({{"other", "app", "other-id", nozzle::backend_type::metal}});
+    automatic.reconcile_sources(registry);
+    expect(automatic.input_a_key() == "old-id", "initial auto A selection is not repeated after disappearance");
+}
+
 void test_output_size_rejects_zero_dimension_updates() {
     nozzle_mixer::mixer_state state;
     state.set_output_size(1920, 1080);
@@ -157,6 +282,11 @@ void test_metal_fallback_presence_is_not_texture_size() {
 int main() {
     test_sender_snapshots_are_sorted_and_deduplicated();
     test_mixer_state_reconciles_inputs();
+    test_selected_inputs_wait_and_reconnect_by_name();
+    test_selected_inputs_accept_direct_uuid_replacement();
+    test_selected_inputs_ignore_uuid_name_collisions();
+    test_explicit_input_clear_and_switch_replace_reconnect_intent();
+    test_initial_auto_selection_and_explicit_none();
     test_output_size_rejects_zero_dimension_updates();
     test_crossfade_is_clamped();
     test_backend_and_mode_names_are_stable();

@@ -184,7 +184,7 @@ void gui::reconcile_sessions() {
         }
     }
     for(auto it = sessions_.begin(); it != sessions_.end();) {
-        if(!registry_.find_by_id_or_name(it->first)) {
+        if(!registry_.find_by_key(it->first)) {
             destroy_session_texture(it->second);
             it = sessions_.erase(it);
         } else {
@@ -199,9 +199,13 @@ void gui::connect_session(receiver_session &session) {
     desc.application_name = "nozzle-mixer";
     auto result = nozzle::receiver::create(desc);
     if(!result.ok()) {
-        session.connected = false;
-        session.status = "receiver unavailable";
-        session.error = result.error().message;
+        if(result.error().code == nozzle::ErrorCode::SenderClosed || result.error().code == nozzle::ErrorCode::SenderNotFound) {
+            disconnect_session(session);
+        } else {
+            session.connected = false;
+            session.status = "receiver unavailable";
+            session.error = result.error().message;
+        }
         return;
     }
     session.receiver = std::make_unique<nozzle::receiver>(std::move(result.value()));
@@ -211,10 +215,16 @@ void gui::connect_session(receiver_session &session) {
     session.error.clear();
 }
 
+void gui::disconnect_session(receiver_session &session) {
+    session.receiver.reset();
+    session.connected = false;
+    session.status = "waiting for source";
+    session.error.clear();
+}
+
 void gui::acquire_frame(receiver_session &session) {
     if(!session.receiver || !session.receiver->valid()) {
-        session.connected = false;
-        session.status = "disconnected";
+        disconnect_session(session);
         return;
     }
     nozzle::acquire_desc desc{};
@@ -223,13 +233,12 @@ void gui::acquire_frame(receiver_session &session) {
     if(!frame_result.ok()) {
         if(frame_result.error().code == nozzle::ErrorCode::Timeout) {
             session.status = "waiting for frame";
+            session.error.clear();
+        } else if(frame_result.error().code == nozzle::ErrorCode::SenderClosed || frame_result.error().code == nozzle::ErrorCode::SenderNotFound) {
+            disconnect_session(session);
         } else {
             session.status = "acquire failed";
             session.error = frame_result.error().message;
-            if(frame_result.error().code == nozzle::ErrorCode::SenderClosed || frame_result.error().code == nozzle::ErrorCode::SenderNotFound) {
-                session.connected = false;
-                session.receiver.reset();
-            }
         }
         return;
     }
@@ -331,7 +340,9 @@ void gui::draw_toolbar() {
 
 void gui::draw_input_selector(const char *label, bool input_a) {
     const std::string &current_key = input_a ? state_.input_a_key() : state_.input_b_key();
-    std::string preview = current_key.empty() ? "<none>" : current_key;
+    const std::string &current_name = input_a ? state_.input_a_name() : state_.input_b_name();
+    std::string preview = current_key.empty() ? "<none>" : current_name;
+    if(!current_key.empty() && !registry_.find_by_key(current_key)) preview += " (waiting for source)";
     if(ImGui::BeginCombo(label, preview.c_str())) {
         if(ImGui::Selectable("<none>", current_key.empty())) {
             if(input_a) state_.set_input_a_key(""); else state_.set_input_b_key("");
@@ -340,6 +351,8 @@ void gui::draw_input_selector(const char *label, bool input_a) {
             const auto key = source_key(source);
             if(ImGui::Selectable(source.name.c_str(), key == current_key)) {
                 if(input_a) state_.set_input_a_key(key); else state_.set_input_b_key(key);
+                // Remember the selected name before the next discovery refresh can remove its UUID.
+                state_.reconcile_sources(registry_);
             }
         }
         ImGui::EndCombo();
