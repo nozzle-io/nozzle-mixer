@@ -30,9 +30,10 @@ public:
         return fail("Linux GPU render path requires EGL/GBM compositor implementation");
     }
 
-    bool publish(nozzle::sender &sender) override {
+    nozzle::Result<void> publish(nozzle::sender &sender) override {
         (void)sender;
-        return fail("Linux GPU publish path requires DMA-BUF export implementation");
+        fail("Linux GPU publish path requires DMA-BUF export implementation");
+        return nozzle::Error{nozzle::ErrorCode::UnsupportedBackend, error_};
     }
 
     void *preview_texture_handle() const override { return nullptr; }

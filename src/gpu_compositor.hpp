@@ -46,7 +46,7 @@ public:
     virtual bool init(uint32_t width, uint32_t height) = 0;
     virtual bool resize(uint32_t width, uint32_t height) = 0;
     virtual bool render(const gpu_frame_ref *input_a, const gpu_frame_ref *input_b, const compositor_params &params) = 0;
-    virtual bool publish(nozzle::sender &sender) = 0;
+    virtual nozzle::Result<void> publish(nozzle::sender &sender) = 0;
     virtual void *preview_texture_handle() const = 0;
     virtual const char *backend_name() const = 0;
     virtual const char *last_error() const = 0;

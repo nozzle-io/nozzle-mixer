@@ -13,7 +13,7 @@ class output_publisher {
 public:
     bool start(const std::string &name, uint32_t width, uint32_t height);
     void stop();
-    bool publish(gpu_compositor &compositor);
+    nozzle::Result<void> publish(gpu_compositor &compositor);
 
     bool active() const noexcept;
     const std::string &status() const noexcept;
