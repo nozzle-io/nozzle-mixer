@@ -184,7 +184,7 @@ void gui::reconcile_sessions() {
         }
     }
     for(auto it = sessions_.begin(); it != sessions_.end();) {
-        if(!registry_.find_by_id_or_name(it->first)) {
+        if(!registry_.find_by_key(it->first)) {
             destroy_session_texture(it->second);
             it = sessions_.erase(it);
         } else {
@@ -342,7 +342,7 @@ void gui::draw_input_selector(const char *label, bool input_a) {
     const std::string &current_key = input_a ? state_.input_a_key() : state_.input_b_key();
     const std::string &current_name = input_a ? state_.input_a_name() : state_.input_b_name();
     std::string preview = current_key.empty() ? "<none>" : current_name;
-    if(!current_key.empty() && !registry_.find_by_id_or_name(current_key)) preview += " (waiting for source)";
+    if(!current_key.empty() && !registry_.find_by_key(current_key)) preview += " (waiting for source)";
     if(ImGui::BeginCombo(label, preview.c_str())) {
         if(ImGui::Selectable("<none>", current_key.empty())) {
             if(input_a) state_.set_input_a_key(""); else state_.set_input_b_key("");

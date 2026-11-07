@@ -10,7 +10,7 @@ std::string source_key(const source_entry &source) {
 
 void reconcile_input(const source_registry &registry, std::string &key, std::string &name) {
     if(key.empty()) return;
-    const auto *source = registry.find_by_id_or_name(key);
+    const auto *source = registry.find_by_key(key);
     if(!source && !name.empty()) {
         for(const auto &candidate : registry.sources()) {
             if(candidate.name == name) {

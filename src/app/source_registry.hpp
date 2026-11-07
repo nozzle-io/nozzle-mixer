@@ -21,7 +21,7 @@ public:
     void set_sources(std::vector<source_entry> sources);
 
     const std::vector<source_entry> &sources() const noexcept;
-    const source_entry *find_by_id_or_name(const std::string &key) const noexcept;
+    const source_entry *find_by_key(const std::string &key) const noexcept;
     std::uint64_t generation() const noexcept;
 
 private:

@@ -105,6 +105,31 @@ void test_selected_inputs_accept_direct_uuid_replacement() {
     }
 }
 
+void test_selected_inputs_ignore_uuid_name_collisions() {
+    for(bool input_a : {true, false}) {
+        nozzle_mixer::source_registry registry;
+        registry.set_sources({{"camera", "app", "U", nozzle::backend_type::metal}});
+        nozzle_mixer::mixer_state state;
+        set_input_key(state, input_a, "U");
+        state.reconcile_sources(registry);
+
+        registry.set_sources({{"U", "impostor", "V", nozzle::backend_type::metal}});
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "U", "impostor name must not steal missing A/B UUID selection");
+        expect((input_a ? state.input_a_name() : state.input_b_name()) == "camera",
+            "impostor name must not replace remembered A/B source name");
+
+        registry.set_sources({
+            {"U", "impostor", "V", nozzle::backend_type::metal},
+            {"camera", "replacement", "new-id", nozzle::backend_type::metal},
+        });
+        state.reconcile_sources(registry);
+        expect(input_key(state, input_a) == "new-id", "A/B reconnects camera despite colliding impostor name");
+        expect((input_a ? state.input_a_name() : state.input_b_name()) == "camera",
+            "A/B retains camera intent after UUID replacement");
+    }
+}
+
 void test_explicit_input_clear_and_switch_replace_reconnect_intent() {
     for(bool input_a : {true, false}) {
         for(bool clear : {true, false}) {
@@ -259,6 +284,7 @@ int main() {
     test_mixer_state_reconciles_inputs();
     test_selected_inputs_wait_and_reconnect_by_name();
     test_selected_inputs_accept_direct_uuid_replacement();
+    test_selected_inputs_ignore_uuid_name_collisions();
     test_explicit_input_clear_and_switch_replace_reconnect_intent();
     test_initial_auto_selection_and_explicit_none();
     test_output_size_rejects_zero_dimension_updates();

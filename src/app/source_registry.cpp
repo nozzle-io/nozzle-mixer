@@ -37,9 +37,10 @@ const std::vector<source_entry> &source_registry::sources() const noexcept {
     return sources_;
 }
 
-const source_entry *source_registry::find_by_id_or_name(const std::string &key) const noexcept {
+const source_entry *source_registry::find_by_key(const std::string &key) const noexcept {
+    if(key.empty()) return nullptr;
     auto it = std::find_if(sources_.begin(), sources_.end(), [&key](const source_entry &source) {
-        return source.id == key || source.name == key;
+        return (source.id.empty() ? source.name : source.id) == key;
     });
     return it == sources_.end() ? nullptr : &*it;
 }
