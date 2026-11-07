@@ -13,6 +13,8 @@ public:
     bool auto_refresh() const noexcept;
     const std::string &input_a_key() const noexcept;
     const std::string &input_b_key() const noexcept;
+    const std::string &input_a_name() const noexcept;
+    const std::string &input_b_name() const noexcept;
     const std::string &output_name() const noexcept;
     uint32_t output_width() const noexcept;
     uint32_t output_height() const noexcept;
@@ -36,6 +38,9 @@ private:
     bool auto_refresh_{true};
     std::string input_a_key_{};
     std::string input_b_key_{};
+    std::string input_a_name_{};
+    std::string input_b_name_{};
+    bool initial_input_a_selection_{true};
     std::string output_name_{"nozzle-mixer"};
     uint32_t output_width_{1280};
     uint32_t output_height_{720};
