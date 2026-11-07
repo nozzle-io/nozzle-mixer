@@ -66,11 +66,15 @@ public:
         return true;
     }
 
-    bool publish(nozzle::sender &sender) override {
-        if(!output_) return fail("no D3D11 output texture to publish");
+    nozzle::Result<void> publish(nozzle::sender &sender) override {
+        if(!output_) {
+            fail("no D3D11 output texture to publish");
+            return nozzle::Error{nozzle::ErrorCode::InvalidArgument, error_};
+        }
         auto result = sender.publish_native_texture(output_.Get(), width_, height_, nozzle::texture_format::bgra8_unorm);
-        if(!result.ok()) return fail(result.error().message.c_str());
-        return true;
+        if(!result.ok()) error_ = result.error().message;
+        else error_.clear();
+        return result;
     }
 
     void *preview_texture_handle() const override { return output_.Get(); }

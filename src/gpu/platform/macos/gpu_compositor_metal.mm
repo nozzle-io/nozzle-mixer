@@ -220,8 +220,11 @@ public:
         }
     }
 
-    bool publish(nozzle::sender &sender) override {
-        if(!output_texture_) return fail("no output texture to publish");
+    nozzle::Result<void> publish(nozzle::sender &sender) override {
+        if(!output_texture_) {
+            fail("no output texture to publish");
+            return nozzle::Error{nozzle::ErrorCode::InvalidArgument, error_};
+        }
         nozzle::metal::direct_publish_desc desc{};
         desc.texture = (__bridge void *)output_texture_;
         desc.width = width_;
@@ -229,8 +232,9 @@ public:
         desc.storage_format = nozzle::texture_format::bgra8_unorm;
         desc.semantic_format = nozzle::texture_format::bgra8_unorm;
         auto result = sender.publish_metal_texture_direct(desc);
-        if(!result.ok()) return fail(result.error().message.c_str());
-        return true;
+        if(!result.ok()) error_ = result.error().message;
+        else error_.clear();
+        return result;
     }
 
     void *preview_texture_handle() const override { return (__bridge void *)output_texture_; }

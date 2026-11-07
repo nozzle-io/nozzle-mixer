@@ -6,6 +6,7 @@
 
 #include <nozzle/receiver.hpp>
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cctype>
@@ -36,6 +37,7 @@ struct smoke_forward_result {
     uint64_t observed_count{0};
     uint64_t distinct_count{0};
     uint64_t published_count{0};
+    uint64_t publish_timeouts{0};
     uint64_t last_frame_index{0};
     std::vector<uint64_t> observed_frame_indices{};
     nozzle::connected_sender_info sender_info{};
@@ -126,7 +128,9 @@ std::string make_evidence_json(const smoke_forward_options &options, const smoke
     stream << "    \"name\": \"" << json_escape(options.output_name) << "\",\n";
     stream << "    \"width\": " << options.width << ",\n";
     stream << "    \"height\": " << options.height << ",\n";
-    stream << "    \"published_count\": " << result.published_count << "\n";
+    stream << "    \"published_count\": " << result.published_count << ",\n";
+    stream << "    \"publish_timeouts\": " << result.publish_timeouts << ",\n";
+    stream << "    \"progress_timeout_ms\": " << options.timeout_ms << "\n";
     stream << "  },\n";
     stream << "  \"gpu_path\": {\n";
     stream << "    \"compositor_backend\": \"" << json_escape(result.compositor_backend) << "\",\n";
@@ -209,6 +213,7 @@ bool has_smoke_forward_request(int argc, char **argv) noexcept {
 
 void print_smoke_forward_usage() {
     std::printf("Usage: nozzle-mixer [--smoke-forward --source NAME --output NAME --width N --height N --min-frames N --publish-frames N --timeout-ms N --hold-ms N --evidence PATH]\n");
+    std::printf("  --timeout-ms bounds waiting for each successful output publication.\n");
 }
 
 bool parse_smoke_forward_options(int argc, char **argv, smoke_forward_options &options) {
@@ -304,10 +309,10 @@ int run_smoke_forward(const smoke_forward_options &options) {
     compositor_params params{};
     params.mode = mixer_mode::cut_a;
 
-    const auto start = std::chrono::steady_clock::now();
+    auto last_progress = std::chrono::steady_clock::now();
     while(result.published_count < options.publish_frames) {
         const auto now = std::chrono::steady_clock::now();
-        const uint64_t elapsed_ms = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+        const uint64_t elapsed_ms = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(now - last_progress).count();
         if(options.timeout_ms <= elapsed_ms) {
             result.failure_reason = receiver ? "timeout_waiting_for_publish_frames" : "receiver_create_timeout";
             break;
@@ -367,12 +372,34 @@ int run_smoke_forward(const smoke_forward_options &options) {
             result.compositor_error = compositor->last_error();
             break;
         }
-        if(!publisher.publish(*compositor)) {
-            result.failure_reason = "publisher_publish_failed";
-            result.publisher_error = publisher.error();
-            break;
+        // Retry the rendered output, not a consumed writable frame. Only a
+        // successful publication advances the progress deadline and count.
+        for(;;) {
+            const auto publish_now = std::chrono::steady_clock::now();
+            const uint64_t progress_ms = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(publish_now - last_progress).count();
+            if(options.timeout_ms <= progress_ms) {
+                result.failure_reason = "timeout_waiting_for_publish_frames";
+                break;
+            }
+            auto publish_result = publisher.publish(*compositor);
+            if(publish_result.ok()) {
+                result.publisher_error.clear();
+                break;
+            }
+            result.publisher_error = publish_result.error().message;
+            if(publish_result.error().code != nozzle::ErrorCode::Timeout) {
+                result.failure_reason = "publisher_publish_failed";
+                break;
+            }
+            result.publish_timeouts = result.publish_timeouts + 1u;
+            const uint64_t waited_ms = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - last_progress).count();
+            if(waited_ms < options.timeout_ms) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(std::min<uint64_t>(10u, options.timeout_ms - waited_ms)));
+            }
         }
+        if(!result.failure_reason.empty()) break;
         result.published_count = result.published_count + 1u;
+        last_progress = std::chrono::steady_clock::now();
     }
 
     if(result.failure_reason.empty()) {

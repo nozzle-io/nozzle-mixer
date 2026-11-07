@@ -34,19 +34,20 @@ void output_publisher::stop() {
     error_.clear();
 }
 
-bool output_publisher::publish(gpu_compositor &compositor) {
+nozzle::Result<void> output_publisher::publish(gpu_compositor &compositor) {
     if(!sender_) {
         status_ = "stopped";
-        return false;
+        return nozzle::Error{nozzle::ErrorCode::InvalidArgument, "output sender is not active"};
     }
-    if(!compositor.publish(*sender_)) {
+    auto result = compositor.publish(*sender_);
+    if(!result.ok()) {
         status_ = "publish failed";
-        error_ = compositor.last_error();
-        return false;
+        error_ = result.error().message;
+        return result;
     }
     status_ = "publishing";
     error_.clear();
-    return true;
+    return {};
 }
 
 bool output_publisher::active() const noexcept {
