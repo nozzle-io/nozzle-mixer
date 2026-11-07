@@ -292,7 +292,7 @@ int run_smoke_forward(const smoke_forward_options &options) {
     result.compositor_backend = compositor->backend_name();
 
     output_publisher publisher{};
-    if(!publisher.start(options.output_name, options.width, options.height)) {
+    if(!publisher.start(options.output_name, options.width, options.height, compositor->native_device())) {
         result.failure_reason = "publisher_start_failed";
         result.publisher_error = publisher.error();
         if(!write_evidence(options.evidence_path, make_evidence_json(options, result))) return 1;
