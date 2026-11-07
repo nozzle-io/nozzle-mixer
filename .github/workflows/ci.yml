@@ -87,6 +87,12 @@ jobs:
         run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure -C Release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Windows Unicode input selection and output registration
+        timeout-minutes: 2
+        run: python tests/windows_cli_utf8.py --exe build/Release/nozzle-mixer.exe --probe build/Release/nozzle_mixer_sender_name_probe.exe
       - name: Prepare package metadata
         id: meta
         shell: pwsh

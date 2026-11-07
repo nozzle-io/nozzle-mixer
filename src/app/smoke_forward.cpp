@@ -20,6 +20,10 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
+#include <filesystem>
+#endif
+
 namespace nozzle_mixer {
 
 namespace {
@@ -167,7 +171,11 @@ std::string make_evidence_json(const smoke_forward_options &options, const smoke
 
 bool write_evidence(const std::string &path, const std::string &json) {
     if(path.empty()) return true;
+#if defined(_WIN32)
+    std::ofstream stream(std::filesystem::u8path(path));
+#else
     std::ofstream stream(path);
+#endif
     if(!stream) return false;
     stream << json;
     return static_cast<bool>(stream);
